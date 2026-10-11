@@ -108,6 +108,31 @@ body.light .loginbox p{color:#70758e}
 </header>
 <section class="page active" id="chatsPage"><div class="pagehead"><h2>Chats 💬</h2><div class="muted">Your people. Your conversations.</div></div><div id="chatList" class="scroll"></div></section>
 <section class="page" id="chatPage"><div class="chathead"><button class="iconbtn" id="backChats">‹</button><img class="avatar" id="chatAvatar" alt=""><div class="chatheadinfo"><b id="chatName">Chat</b><small id="chatSub">SOCIAL CHAT</small></div><button class="iconbtn" id="callBtn" title="Voice call">📞</button></div><div id="messages"></div><div class="composer"><button class="iconbtn" id="attachBtn" title="Send image">📎</button><input type="file" id="imageInput" accept="image/*" hidden><button class="iconbtn" id="recordBtn" title="Voice message">🎙️</button><input id="messageInput" placeholder="Type a message..." autocomplete="off"><button class="send" id="sendBtn" aria-label="Send">➤</button></div></section>
+<button class="iconbtn" id="callBtn" title="Voice call">📞</button>
+<button class="iconbtn" id="videoCallBtn" title="Video call">📹</button>
+<!-- VIDEO CALL SCREEN -->
+<div class="calloverlay" id="videoCallOverlay" style="display:none;z-index:30">
+  <div style="width:95%;max-width:700px;text-align:center;color:white">
+    <h2 id="videoCallName">Video Call 📹</h2>
+
+    <div style="position:relative;background:#050509;border-radius:18px;overflow:hidden;min-height:300px">
+      <video id="remoteVideo" autoplay playsinline
+        style="width:100%;max-height:65vh;object-fit:contain"></video>
+
+      <video id="localVideo" autoplay muted playsinline
+        style="position:absolute;right:12px;bottom:12px;width:120px;height:160px;object-fit:cover;border:2px solid white;border-radius:12px;background:#222"></video>
+    </div>
+
+    <p id="videoCallState">Connecting...</p>
+
+    <div class="callactions">
+      <button id="videoAcceptBtn" style="background:#20a96b">📹</button>
+      <button id="videoMuteBtn">🎙️</button>
+      <button id="videoCameraBtn">📷</button>
+      <button id="videoEndBtn" class="end">✕</button>
+    </div>
+  </div>
+</div>
 <section class="page" id="friendsPage"><div class="pagehead"><h2>Friends 👥</h2><div class="muted">Meet your people</div></div><div class="scroll"><div style="padding:12px 15px 4px"><h3>Friend requests</h3></div><div id="requestsList"></div><div style="padding:12px 15px 4px"><h3>My Friends</h3></div><div id="myFriends"></div><div style="padding:12px 15px 4px"><h3>Discover people</h3></div><div style="padding:0 15px 12px"><input id="friendSearch" class="search" placeholder="Search by name or email"></div><div id="addFriendsList"></div></div></section>
 <section class="page" id="statusPage"><div class="pagehead"><h2>Status 📸</h2><div class="muted">Share a moment with your friends</div></div><div class="statuscomposer"><input id="statusText" placeholder="What's your status?"><button class="primary" id="postStatus">Post</button></div><div style="padding:0 15px 12px"><button class="secondary" id="statusImageBtn">＋ Add photo</button><input id="statusImageInput" type="file" accept="image/*" hidden></div><div class="scroll" id="statusesList"></div></section>
 <nav class="bottomnav" id="bottomNav"><button class="navbtn active" data-page="chatsPage"><span>💬</span>Chats</button><button class="navbtn" data-page="friendsPage"><span>👥</span>Friends</button><button class="navbtn" data-page="statusPage"><span>📸</span>Status</button></nav>
@@ -118,7 +143,13 @@ body.light .loginbox p{color:#70758e}
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import{getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import{getFirestore,collection,doc,getDoc,getDocs,setDoc,addDoc,updateDoc,query,where,orderBy,onSnapshot,serverTimestamp}from"https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+import{
+getFirestore,collection,doc,getDoc,getDocs,setDoc,addDoc,
+updateDoc,deleteDoc,query,where,orderBy,onSnapshot,
+serverTimestamp,limit,arrayUnion,arrayRemove
+}from"https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
 const firebaseConfig={apiKey:"AIzaSyBTjA_RsNNq1PtfSdE2VyFJS_5oU8BsVNc",authDomain:"social-chat-d48ff.firebaseapp.com",projectId:"social-chat-d48ff",storageBucket:"social-chat-d48ff.firebasestorage.app",messagingSenderId:"198437830373",appId:"1:198437830373:web:61616f534f9ee7e3c19e0c",measurementId:"G-7XMGG8N96Z"};
 const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);
 const $=id=>document.getElementById(id);
@@ -136,6 +167,7 @@ onAuthStateChanged(auth,async user=>{
 if(!user){if(incomingUnsub){incomingUnsub();incomingUnsub=null}if(unMessages){unMessages();unMessages=null}if(unRequests){unRequests();unRequests=null}if(unStatuses){unStatuses();unStatuses=null}if(pc)await endCall(false);$("login").style.display="grid";$("app").style.display="none";return}
 me=user;$("login").style.display="none";$("app").style.display="block";
 try{const r=doc(db,"users",me.uid),s=await getDoc(r);if(!s.exists())await setDoc(r,{uid:me.uid,name:me.displayName||"User",email:me.email||"",photo:me.photoURL||"",bio:"",friends:[],createdAt:serverTimestamp()});else if(!s.data().uid)await updateDoc(r,{uid:me.uid});await refreshProfile();await loadPeople();listenRequests();listenStatuses();showPage("chatsPage");if(!incomingUnsub)listenIncoming()}catch(e){toast("Firebase: "+e.message)}
+if(!vIncomingUnsub)listenIncomingVideo();
 });
 async function refreshProfile(){const s=await getDoc(doc(db,"users",me.uid));myProfile=s.data()||{};$("topAvatar").src=photoFor(myProfile);$("profileName").value=myProfile.name||me.displayName||"";$("profilePhoto").value=myProfile.photo||"";$("profilePhotoPreview").src=photoFor(myProfile);$("profileBio").value=myProfile.bio||""}
 async function loadPeople(){
@@ -172,6 +204,311 @@ $("statusImageInput").onchange=async e=>{const f=e.target.files[0];if(!f)return;
 $("postStatus").onclick=async()=>{const text=$("statusText").value.trim();if(!text&&!pendingStatusPhoto){toast("Text ya photo add karo");return}try{await updateDoc(doc(db,"users",me.uid),{statusText:text,statusPhoto:pendingStatusPhoto,statusAt:serverTimestamp()});$("statusText").value="";pendingStatusPhoto="";$("statusImageBtn").textContent="＋ Add photo";toast("Status posted!")}catch(e){toast("Status post nahi hua: "+e.message)}};
 function listenStatuses(){if(unStatuses)unStatuses();unStatuses=onSnapshot(collection(db,"users"),s=>{const box=$("statusesList");box.innerHTML="";const docs=s.docs.map(d=>({...d.data(),uid:d.data().uid||d.id})).filter(u=>u.statusAt&&(u.uid===me.uid||(myProfile.friends||[]).includes(u.uid)||friends.some(f=>f.uid===u.uid)));docs.sort((a,b)=>(b.statusAt?.toMillis?.()||0)-(a.statusAt?.toMillis?.()||0));if(!docs.length){box.innerHTML='<div class="empty">📸<br><br>No statuses yet. Share your first moment!</div>';return}docs.forEach(u=>{const el=document.createElement("div");el.className="statuscard";el.innerHTML=`<div style="display:flex;align-items:center;gap:10px"><img class="smallavatar" src="${safe(photoFor(u))}" alt=""><div><b>${safe(u.name||"User")}</b><div class="muted">${safe(when(u.statusAt))}</div></div></div>${u.statusText?`<p>${safe(u.statusText)}</p>`:""}${u.statusPhoto?`<img src="${safe(u.statusPhoto)}" alt="Status photo">`:""}`;box.append(el)})},e=>toast("Status: "+e.message))}
 const rtc={iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun1.l.google.com:19302"}]};
+// ===== SEPARATE VIDEO CALL SYSTEM =====
+let vpc = null;
+let vstream = null;
+let vCallRef = null;
+let vCallId = null;
+let vIncomingUnsub = null;
+let vCallUnsub = null;
+let vCandidateUnsub = null;
+let vPendingCandidates = [];
+let vMuted = false;
+let vCameraOff = false;
+
+function showVideoCall(name, state) {
+  $("videoCallName").textContent = name || "Video Call";
+  $("videoCallState").textContent = state;
+  $("videoCallOverlay").style.display = "flex";
+}
+
+async function startVideoCall() {
+  if (!selected) {
+    toast("Pehle friend select karo");
+    return;
+  }
+
+  if (vCallId) {
+    toast("Video call pehle se active hai");
+    return;
+  }
+
+  try {
+    vstream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true
+    });
+
+    $("localVideo").srcObject = vstream;
+
+    vCallId = me.uid + "_" + Date.now();
+    vCallRef = doc(db, "videoCalls", vCallId);
+    vpc = new RTCPeerConnection(rtc);
+
+    vstream.getTracks().forEach(track => vpc.addTrack(track, vstream));
+
+    vpc.ontrack = event => {
+      $("remoteVideo").srcObject = event.streams[0];
+    };
+
+    vpc.onicecandidate = event => {
+      if (event.candidate && vCallId) {
+        addDoc(
+          collection(db, "videoCalls", vCallId, "callerCandidates"),
+          event.candidate.toJSON()
+        ).catch(console.error);
+      }
+    };
+
+    const offer = await vpc.createOffer();
+    await vpc.setLocalDescription(offer);
+
+    await setDoc(vCallRef, {
+      callerId: me.uid,
+      calleeId: selected.uid,
+      callerName: myProfile.name || me.displayName || "Friend",
+      callerPhoto: myProfile.photo || me.photoURL || "",
+      offer: {
+        type: offer.type,
+        sdp: offer.sdp
+      },
+      status: "ringing",
+      createdAt: serverTimestamp()
+    });
+
+    showVideoCall(selected.name, "Calling...");
+    $("videoAcceptBtn").style.display = "none";
+    $("videoMuteBtn").style.display = "inline-block";
+    $("videoCameraBtn").style.display = "inline-block";
+
+    watchVideoAnswer();
+  } catch (error) {
+    toast("Video call start nahi hui: " + error.message);
+    await endVideoCall(false);
+  }
+}
+
+$("videoCallBtn").onclick = startVideoCall;
+
+function watchVideoAnswer() {
+  if (vCallUnsub) vCallUnsub();
+
+  vCallUnsub = onSnapshot(vCallRef, async snapshot => {
+    if (!snapshot.exists()) return;
+
+    const data = snapshot.data();
+
+    if (data.answer && vpc && !vpc.currentRemoteDescription) {
+      try {
+        await vpc.setRemoteDescription(data.answer);
+        await flushVideoCandidates();
+
+        $("videoCallState").textContent = "Connected";
+        listenVideoCandidates("calleeCandidates");
+      } catch (error) {
+        console.error("Video answer error:", error);
+      }
+    }
+
+    if (data.status === "ended") {
+      await endVideoCall(false);
+    }
+  }, error => toast("Video call error: " + error.message));
+}
+
+async function addVideoCandidateSafely(candidate) {
+  if (!vpc) return;
+
+  if (!vpc.remoteDescription) {
+    vPendingCandidates.push(candidate);
+    return;
+  }
+
+  try {
+    await vpc.addIceCandidate(candidate);
+  } catch (error) {
+    console.warn("ICE candidate error:", error);
+  }
+}
+
+async function flushVideoCandidates() {
+  if (!vpc || !vpc.remoteDescription) return;
+
+  for (const candidate of vPendingCandidates.splice(0)) {
+    await addVideoCandidateSafely(candidate);
+  }
+}
+
+function listenVideoCandidates(type) {
+  if (vCandidateUnsub) vCandidateUnsub();
+
+  vCandidateUnsub = onSnapshot(
+    collection(db, "videoCalls", vCallId, type),
+    snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === "added") {
+          addVideoCandidateSafely(change.doc.data());
+        }
+      });
+    }
+  );
+}
+
+function listenIncomingVideo() {
+  if (vIncomingUnsub) vIncomingUnsub();
+
+  vIncomingUnsub = onSnapshot(
+    query(
+      collection(db, "videoCalls"),
+      where("calleeId", "==", me.uid),
+      where("status", "==", "ringing")
+    ),
+    snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type !== "added" || vCallId) return;
+
+        const data = change.doc.data();
+
+        if (data.callerId === me.uid) return;
+
+        vCallId = change.doc.id;
+        vCallRef = doc(db, "videoCalls", vCallId);
+
+        showVideoCall(data.callerName || "Friend", "Incoming video call");
+        $("videoAcceptBtn").style.display = "inline-block";
+        $("videoMuteBtn").style.display = "none";
+        $("videoCameraBtn").style.display = "none";
+      });
+    },
+    error => console.warn("Incoming video call error:", error)
+  );
+}
+
+$("videoAcceptBtn").onclick = async () => {
+  try {
+    if (!vCallRef) return;
+
+    const snapshot = await getDoc(vCallRef);
+    if (!snapshot.exists()) return;
+
+    const data = snapshot.data();
+    vPendingCandidates = [];
+
+    vstream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true
+    });
+
+    $("localVideo").srcObject = vstream;
+
+    vpc = new RTCPeerConnection(rtc);
+    vstream.getTracks().forEach(track => vpc.addTrack(track, vstream));
+
+    vpc.ontrack = event => {
+      $("remoteVideo").srcObject = event.streams[0];
+    };
+
+    vpc.onicecandidate = event => {
+      if (event.candidate && vCallId) {
+        addDoc(
+          collection(db, "videoCalls", vCallId, "calleeCandidates"),
+          event.candidate.toJSON()
+        ).catch(console.error);
+      }
+    };
+
+    await vpc.setRemoteDescription(data.offer);
+    await flushVideoCandidates();
+
+    const answer = await vpc.createAnswer();
+    await vpc.setLocalDescription(answer);
+
+    await updateDoc(vCallRef, {
+      answer: {
+        type: answer.type,
+        sdp: answer.sdp
+      },
+      status: "connected"
+    });
+
+    $("videoCallState").textContent = "Connected";
+    $("videoAcceptBtn").style.display = "none";
+    $("videoMuteBtn").style.display = "inline-block";
+    $("videoCameraBtn").style.display = "inline-block";
+
+    listenVideoCandidates("callerCandidates");
+  } catch (error) {
+    toast("Video call connect nahi hui: " + error.message);
+    await endVideoCall();
+  }
+};
+
+$("videoMuteBtn").onclick = () => {
+  if (!vstream) return;
+
+  vMuted = !vMuted;
+  vstream.getAudioTracks().forEach(track => {
+    track.enabled = !vMuted;
+  });
+
+  $("videoMuteBtn").textContent = vMuted ? "🔇" : "🎙️";
+};
+
+$("videoCameraBtn").onclick = () => {
+  if (!vstream) return;
+
+  vCameraOff = !vCameraOff;
+  vstream.getVideoTracks().forEach(track => {
+    track.enabled = !vCameraOff;
+  });
+
+  $("videoCameraBtn").textContent = vCameraOff ? "🚫" : "📷";
+};
+
+$("videoEndBtn").onclick = () => endVideoCall(true);
+
+async function endVideoCall(notify = true) {
+  try {
+    if (notify && vCallRef) {
+      await updateDoc(vCallRef, { status: "ended" });
+    }
+  } catch (error) {
+    console.warn(error);
+  }
+
+  if (vCallUnsub) {
+    vCallUnsub();
+    vCallUnsub = null;
+  }
+
+  if (vCandidateUnsub) {
+    vCandidateUnsub();
+    vCandidateUnsub = null;
+  }
+
+  if (vpc) {
+    vpc.close();
+    vpc = null;
+  }
+
+  if (vstream) {
+    vstream.getTracks().forEach(track => track.stop());
+    vstream = null;
+  }
+
+  $("localVideo").srcObject = null;
+  $("remoteVideo").srcObject = null;
+  $("videoCallOverlay").style.display = "none";
+  $("videoAcceptBtn").style.display = "inline-block";
+  $("videoMuteBtn").textContent = "🎙️";
+  $("videoCameraBtn").textContent = "📷";
+
+  vCallId = null;
+  vCallRef = null;
+  vPendingCandidates = [];
+  vMuted = false;
+  vCameraOff = false;
+}
 function showCall(u,state){$("callAvatar").src=photoFor(u);$("callName").textContent=u.name||"Voice call";$("callState").textContent=state;$("callOverlay").style.display="flex"}
 async function startCall(){if(!selected){toast("Pehle friend select karo");return}try{mic=await navigator.mediaDevices.getUserMedia({audio:true});callId=me.uid+"_"+Date.now();callRef=doc(db,"calls",callId);pc=new RTCPeerConnection(rtc);mic.getTracks().forEach(t=>pc.addTrack(t,mic));pc.ontrack=e=>$("remoteAudio").srcObject=e.streams[0];pc.onicecandidate=async e=>{if(e.candidate&&callId)await addDoc(collection(db,"calls",callId,"callerCandidates"),e.candidate.toJSON())};const offer=await pc.createOffer();await pc.setLocalDescription(offer);await setDoc(callRef,{callerId:me.uid,calleeId:selected.uid,callerName:myProfile.name||me.displayName,callerPhoto:myProfile.photo||me.photoURL||"",offer:{type:offer.type,sdp:offer.sdp},status:"ringing",createdAt:serverTimestamp()});showCall(selected,"Calling...");$("acceptBtn").style.display="none";$("muteBtn").style.display="block";watchAnswer()}catch(e){toast("Call start nahi hui: "+e.message);endCall(false)}}
 $("callBtn").onclick=startCall;
@@ -186,6 +523,405 @@ function stopTimer(){clearInterval(callTimer);callTimer=null;seconds=0;$("callTi
 $("muteBtn").onclick=()=>{if(!mic)return;muted=!muted;mic.getAudioTracks().forEach(t=>t.enabled=!muted);$("muteBtn").textContent=muted?"🔇":"🎙️"};
 $("endBtn").onclick=()=>endCall(true);
 async function endCall(notify=true){try{if(notify&&callRef)await updateDoc(callRef,{status:"ended"})}catch(e){}if(unCall){unCall();unCall=null}if(candidateUnsub){candidateUnsub();candidateUnsub=null}if(pc){pc.close();pc=null}if(mic){mic.getTracks().forEach(t=>t.stop());mic=null}if(recorder?.state==="recording"){recorder.stop()}if(recordStream){recordStream.getTracks().forEach(t=>t.stop());recordStream=null}$("remoteAudio").srcObject=null;$("callOverlay").style.display="none";stopTimer();callId=null;callRef=null;muted=false;$("muteBtn").textContent="🎙️"}
+
+/* SOCIAL CHAT — SOCIAL FEED UPGRADE */
+const socialStyle = document.createElement("style");
+socialStyle.textContent = `
+#bottomNav{grid-template-columns:repeat(6,minmax(0,1fr))}
+#bottomNav .navbtn{font-size:10px}
+.social-post{margin:12px;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+.social-post img,.social-post video{width:100%;max-height:520px;object-fit:contain;border-radius:12px;background:#080912}
+.social-post-head{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.social-post-head img{width:40px;height:40px;object-fit:cover;border-radius:50%}
+.social-post-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.social-post-actions button{padding:8px 12px}
+.social-caption{white-space:pre-wrap;overflow-wrap:anywhere}
+`;
+document.head.appendChild(socialStyle);
+
+const socialNav = $("bottomNav");
+socialNav.innerHTML = `
+<button class="navbtn active" data-page="homeSocial"><span>🏠</span>Home</button>
+<button class="navbtn" data-page="exploreSocial"><span>🔍</span>Explore</button>
+<button class="navbtn" data-page="reelsSocial"><span>🎬</span>Reels</button>
+<button class="navbtn" data-page="createSocial"><span>➕</span>Create</button>
+<button class="navbtn" data-page="chatsPage"><span>💬</span>Chats</button>
+<button class="navbtn" data-page="profileSocial"><span>👤</span>Profile</button>`;
+
+const socialPages = [
+["homeSocial","Home ✨","Posts shared by everyone","socialHomeFeed"],
+["exploreSocial","Explore 🔍","Discover public posts","socialExploreFeed"],
+["reelsSocial","Reels 🎬","Watch community videos","socialReelsFeed"],
+["createSocial","Create Post ➕","Share a photo or video publicly","socialCreateArea"],
+["profileSocial","My Profile 👤","Your account and posts","socialProfileArea"]
+];
+
+for (const [id,title,subtitle,contentId] of socialPages) {
+  const section = document.createElement("section");
+  section.className = "page";
+  section.id = id;
+  section.innerHTML = `
+    <div class="pagehead"><h2>${title}</h2><div class="muted">${subtitle}</div></div>
+    <div id="${contentId}" class="scroll"></div>`;
+  socialNav.parentElement.insertBefore(section,socialNav);
+}
+
+$("socialCreateArea").innerHTML = `
+<div style="padding:16px">
+  <label class="muted">Choose photo or video</label>
+  <input id="socialMediaFile" class="field" type="file" accept="image/*,video/*">
+  <label class="muted">Caption</label>
+  <textarea id="socialCaption" class="field" rows="4" maxlength="2000" placeholder="What's happening?"></textarea>
+  <button class="primary" id="socialPublish" style="width:100%">Publish publicly</button>
+  <p class="muted">Firebase Storage must be enabled for uploads.</p>
+</div>`;
+
+$("socialProfileArea").innerHTML = `
+<div style="padding:16px">
+  <div style="display:flex;align-items:center;gap:12px">
+    <img id="socialMyPhoto" class="avatar" alt="">
+    <div><b id="socialMyName"></b><p id="socialMyBio" class="muted"></p></div>
+  </div>
+  <button class="secondary" id="socialEditProfile" style="margin-top:12px">Edit profile</button>
+  <button class="secondary" id="socialOldFriends" style="margin:12px 4px">Friends 👥</button>
+  <button class="secondary" id="socialOldStatus">My Status 📸</button>
+  <h3>My posts</h3>
+  <div id="socialMyPosts"></div>
+</div>`;
+
+const socialFeedBox = id => $(id);
+let publicPosts = [];
+let publicPostsUnsub = null;
+let storageModule = null;
+
+
+function renderPublicCard(p) {
+  const media = p.mediaType === "video"
+    ? `<video src="${safe(p.mediaUrl)}" controls playsinline preload="metadata"></video>`
+    : `<img src="${safe(p.mediaUrl)}" alt="Public post" loading="lazy">`;
+
+  return `<article class="social-post">
+    <div class="social-post-head">
+      <img src="${safe(p.photo || defaultPhoto(p.name))}" alt="">
+      <div>
+        <b>${safe(p.name || "User")}</b>
+        <div class="muted">Public post</div>
+      </div>
+    </div>
+
+    ${media}
+    ${p.caption ? `<p class="social-caption">${safe(p.caption)}</p>` : ""}
+
+    <div class="social-post-actions">
+      <button class="secondary" data-social-like="${safe(p.id)}">
+        ❤️ ${p.likes?.length || 0}
+      </button>
+      <button class="secondary" data-social-comment="${safe(p.id)}">
+        💬 Comments
+      </button>
+      ${p.uid === me?.uid
+        ? `<button class="danger" data-social-delete="${safe(p.id)}">Delete</button>`
+        : ""}
+    </div>
+
+    <div class="social-comments" id="comments-${safe(p.id)}">
+      <div class="muted">Comments load karne ke liye 💬 dabao</div>
+    </div>
+
+    <form class="social-comment-form" data-comment-form="${safe(p.id)}">
+      <input
+        type="text"
+        name="comment"
+        placeholder="Comment likho..."
+        maxlength="500"
+        required
+        ${me ? "" : "disabled"}
+      >
+      <button class="primary" type="submit" ${me ? "" : "disabled"}>
+        Send
+      </button>
+    </form>
+    <div class="social-comments-list">
+  <div class="muted">Comments ko 💬 button se load karo.</div>
+</div>
+  </article>`;
+}
+
+/* COMMENT BUTTON: comments load karo */
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-social-comment]");
+  if (!button) return;
+
+  const postId = button.dataset.socialComment;
+  const box = document.getElementById("comments-" + postId);
+  if (!box) return;
+
+  box.innerHTML = '<div class="muted">Loading comments...</div>';
+
+  try {
+    const commentsRef = collection(db, "posts", postId, "comments");
+    const snap = await getDocs(commentsRef);
+
+    if (snap.empty) {
+      box.innerHTML =
+        '<div class="muted">Abhi koi comment nahi. Pehla comment karo! 💬</div>';
+      return;
+    }
+
+    box.innerHTML = snap.docs.map(d => {
+      const c = d.data();
+      return `
+        <div class="social-comment" style="display:flex;gap:10px;padding:10px;margin:6px 0;border-bottom:1px solid #ddd;overflow-wrap:anywhere;">
+          <b>${safe(c.name || "User")}</b>
+          <span>${safe(c.text || "")}</span>
+        </div>`;
+    }).join("");
+
+    box.style.display = "block";
+    box.style.visibility = "visible";
+    box.style.color = "inherit";
+  } catch (err) {
+    console.error("Comments load error:", err);
+    box.innerHTML =
+      '<div class="muted">Comments load nahi hue: ' +
+      safe(err.message) + '</div>';
+  }
+});
+
+/* SEND COMMENT */
+document.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-comment-form]");
+  if (!form) return;
+
+  event.preventDefault();
+
+  if (!me) {
+    toast("Comment karne ke liye login karo");
+    return;
+  }
+
+  const postId = form.dataset.commentForm;
+  const input = form.querySelector('input[name="comment"]');
+  const text = input.value.trim();
+
+  if (!text) return;
+
+  const sendButton = form.querySelector("button");
+  sendButton.disabled = true;
+
+  try {
+    await addDoc(collection(db, "posts", postId, "comments"), {
+      uid: me.uid,
+      name: myProfile.name || me.displayName || "User",
+      text: text,
+      createdAt: serverTimestamp()
+    });
+
+    input.value = "";
+    toast("Comment posted! 💬");
+
+    const box = document.getElementById("comments-" + postId);
+    const snap = await getDocs(
+      collection(db, "posts", postId, "comments")
+    );
+    console.log("COMMENTS FOUND:", snap.size, snap.docs.map(d => d.data()));
+    box.innerHTML = snap.docs.map(d => {
+      const c = d.data();
+      return `<div class="social-comment">
+        <b>${safe(c.name || "User")}</b>
+        <span>${safe(c.text || "")}</span>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    console.error("Comment error:", err);
+    toast("Comment failed: " + err.message);
+  } finally {
+    sendButton.disabled = false;
+  }
+});
+
+function renderPublicFeeds() {
+  if (!me) return;
+  const show = (id, posts) => {
+    const box = socialFeedBox(id);
+    box.innerHTML = posts.length
+      ? posts.map(renderPublicCard).join("")
+      : '<div class="empty">✨ No posts yet. Create the first post!</div>';
+  };
+
+  show("socialHomeFeed", publicPosts);
+  show("socialExploreFeed", publicPosts.filter(p =>
+    (p.caption || "").toLowerCase().includes(($("socialExploreSearch")?.value || "").toLowerCase()) ||
+    (p.name || "").toLowerCase().includes(($("socialExploreSearch")?.value || "").toLowerCase())
+  ));
+  show("socialReelsFeed", publicPosts.filter(p => p.mediaType === "video"));
+  show("socialMyPosts", publicPosts.filter(p => p.uid === me.uid));
+
+  $("socialMyPhoto").src = photoFor(myProfile);
+  $("socialMyName").textContent = myProfile.name || me.displayName || "User";
+  $("socialMyBio").textContent = myProfile.bio || "";
+}
+
+function listenPublicPosts() {
+  if (publicPostsUnsub) publicPostsUnsub();
+  publicPostsUnsub = onSnapshot(
+    query(collection(db,"posts"),orderBy("createdAt","desc"),limit(50)),
+    snap => {
+      publicPosts = snap.docs.map(d => ({...d.data(),id:d.id}));
+      renderPublicFeeds();
+    },
+    err => toast("Public feed: " + err.message)
+  );
+}
+
+const socialExploreHead = $("exploreSocial").querySelector(".pagehead");
+const socialSearch = document.createElement("input");
+socialSearch.className = "search";
+socialSearch.placeholder = "Search captions or people...";
+socialSearch.style.marginTop = "10px";
+socialExploreHead.appendChild(socialSearch);
+socialSearch.oninput = renderPublicFeeds;
+
+$("socialEditProfile").onclick = () => $("settingsOverlay").classList.add("show");
+$("socialOldFriends").onclick = () => showPage("friendsPage");
+$("socialOldStatus").onclick = () => showPage("statusPage");
+
+$("socialPublish").onclick = async () => {
+  if (!me) return toast("Please log in first");
+
+  const file = $("socialMediaFile").files[0];
+  const caption = $("socialCaption").value.trim();
+
+  if (!file) return toast("Photo ya video choose karo");
+
+  if (!file.type.startsWith("image/") &&
+      !file.type.startsWith("video/")) {
+    return toast("Photo ya video select karo");
+  }
+
+  if (file.size > 30 * 1024 * 1024) {
+    return toast("File 30 MB se chhoti honi chahiye");
+  }
+
+  const btn = $("socialPublish");
+  btn.disabled = true;
+  btn.textContent = "Uploading...";
+
+  try {
+    const isVideo = file.type.startsWith("video/");
+    const resourceType = isVideo ? "video" : "image";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "shocial_upload");
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/zdaoteyp/${resourceType}/upload`,
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.secure_url) {
+      throw new Error(result.error?.message || "Upload failed");
+    }
+
+    await addDoc(collection(db, "posts"), {
+      uid: me.uid,
+      name: myProfile.name || me.displayName || "User",
+      photo: myProfile.photo || me.photoURL || "",
+      caption,
+      mediaUrl: result.secure_url,
+      mediaType: isVideo ? "video" : "image",
+      likes: [],
+      createdAt: serverTimestamp()
+    });
+
+    $("socialMediaFile").value = "";
+    $("socialCaption").value = "";
+
+    toast("Post shared! 🎉");
+    showPage(isVideo ? "reelsSocial" : "homeSocial");
+
+  } catch (err) {
+    toast("Upload failed: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Publish publicly";
+  }
+};
+
+
+document.addEventListener("click", async e => {
+  const like = e.target.closest("[data-social-like]");
+  const comment = e.target.closest("[data-social-comment]");
+  const del = e.target.closest("[data-social-delete]");
+
+  try {
+    if (like) {
+      const p = publicPosts.find(x => x.id === like.dataset.socialLike);
+      if (!p) return;
+      const likes = p.likes || [];
+      await updateDoc(doc(db,"posts",p.id),{
+        likes: likes.includes(me.uid) ? arrayRemove(me.uid) : arrayUnion(me.uid)
+      });
+    }
+
+    if (comment) {
+      const p = publicPosts.find(x => x.id === comment.dataset.socialComment);
+      if (!p) return;
+      const text = prompt("Write your comment:");
+      if (!text?.trim()) return;
+      await addDoc(collection(db,"posts",p.id,"comments"),{
+        uid:me.uid,
+        name:myProfile.name || "User",
+        text:text.trim().slice(0,1000),
+        createdAt:serverTimestamp()
+      });
+      toast("Comment added!");
+    }
+
+    if (del) {
+      const p = publicPosts.find(x => x.id === del.dataset.socialDelete);
+      if (!p || p.uid !== me.uid) return;
+      if (!confirm("Delete this post?")) return;
+      await deleteDoc(doc(db,"posts",p.id));
+      toast("Post deleted");
+    }
+  } catch (err) {
+    toast("Action failed: " + err.message);
+  }
+});
+
+// Keep the existing Firebase login, chats, calls, voice notes and statuses.
+const originalShowPage = showPage;
+showPage = function(id) {
+  originalShowPage(id);
+  if (id === "homeSocial" || id === "exploreSocial" ||
+      id === "reelsSocial" || id === "profileSocial") renderPublicFeeds();
+};
+
+document.querySelectorAll(".navbtn").forEach(b =>
+  b.onclick = () => showPage(b.dataset.page)
+);
+
+onAuthStateChanged(auth,user => {
+  if (user) {
+    me = user;
+    listenPublicPosts();
+  } else {
+    if (publicPostsUnsub) {
+      publicPostsUnsub();
+      publicPostsUnsub = null;
+    }
+    publicPosts = [];
+  }
+});
+
 </script>
 </body>
 </html>
